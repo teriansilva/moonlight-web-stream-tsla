@@ -19,7 +19,7 @@ use actix_web::{
 };
 use log::{LevelFilter, info, warn};
 use serde::{Serialize, de::DeserializeOwned};
-use simplelog::{ColorChoice, TermLogger, TerminalMode};
+use simplelog::{ColorChoice, CombinedLogger, TermLogger, TerminalMode, WriteLogger};
 
 use crate::{
     acme::{acme_challenge_service, acme_api_service, new_challenge_store},
@@ -68,13 +68,33 @@ async fn main() {
     #[cfg(not(debug_assertions))]
     let log_level = LevelFilter::Info;
 
-    TermLogger::init(
+    // Log to a file as well as the console. The console is this process's own AllocConsole
+    // window, and `--minimized` hides it immediately -- so on an unattended/headless install
+    // the terminal logger alone means pairing and streaming failures leave no trace anywhere.
+    // Best-effort: if the file cannot be opened, fall back to the terminal logger only rather
+    // than refusing to start.
+    let term_logger = TermLogger::new(
         log_level,
         simplelog::Config::default(),
         TerminalMode::Mixed,
         ColorChoice::Auto,
-    )
-    .expect("failed to init logger");
+    );
+    let file_logger = std::fs::create_dir_all("logs")
+        .ok()
+        .and_then(|_| {
+            std::fs::OpenOptions::new()
+                .create(true)
+                .append(true)
+                .open("logs/web-server.log")
+                .ok()
+        })
+        .map(|file| WriteLogger::new(log_level, simplelog::Config::default(), file));
+
+    let mut loggers: Vec<Box<dyn simplelog::SharedLogger>> = vec![term_logger];
+    if let Some(file_logger) = file_logger {
+        loggers.push(file_logger);
+    }
+    CombinedLogger::init(loggers).expect("failed to init logger");
 
     // Launch system tray (Windows only)
     #[cfg(windows)]

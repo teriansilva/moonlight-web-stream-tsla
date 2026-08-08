@@ -34,6 +34,12 @@ hex = { workspace = true }
 
 # Windows system tray + startup
 [target.'cfg(windows)'.dependencies]
+# The cross base image ships OpenSSL only for the Linux host, not for the
+# x86_64-pc-windows-gnu sysroot, so openssl-sys has nothing to link against when
+# cross-compiling. Build it from source for Windows targets only -- the native Linux
+# build keeps using the system OpenSSL. cfg(windows) is evaluated against the TARGET,
+# so this switches on exactly when cross-compiling to Windows.
+openssl = { workspace = true, features = ["vendored"] }
 tray-icon = "0.19"
 winreg = "0.55"
 windows = { version = "0.61", features = [

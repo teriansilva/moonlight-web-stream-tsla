@@ -41,6 +41,11 @@ openssl = { workspace = true }
 # Serde Serialization
 serde = { workspace = true, optional = true }
 
+# See the matching note in moonlight-web/web-server/Cargo.toml: no OpenSSL exists in the
+# cross image's Windows sysroot, so vendor it for Windows targets only.
+[target.'cfg(windows)'.dependencies]
+openssl = { workspace = true, features = ["vendored"] }
+
 [features]
 default = ["high", "stream", "backend_reqwest"]
 

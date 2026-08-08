@@ -156,10 +156,12 @@ unsafe extern "C" fn connection_status_update(status: c_int) {
     });
 }
 
-unsafe extern "C" fn log_message(message: *const c_char, mut args: ...) {
+unsafe extern "C" fn log_message(message: *const c_char, args: ...) {
     global_listener(|listener| unsafe {
         let mut text = String::new();
-        format(message, args.as_va_list(), output::fmt_write(&mut text));
+        // Since c_variadic stabilised (Rust 1.99) a `...` parameter binds directly as
+        // `VaList`; the old `VaListImpl::as_va_list()` hop is gone.
+        format(message, args, output::fmt_write(&mut text));
 
         listener.log_message(&text);
     });

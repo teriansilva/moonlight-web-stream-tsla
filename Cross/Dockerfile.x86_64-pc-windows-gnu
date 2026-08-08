@@ -1,6 +1,16 @@
 ARG CROSS_BASE_IMAGE=scratch
 FROM $CROSS_BASE_IMAGE AS base
 
+# cross only exports CROSS_SYSROOT / CROSS_TOOLCHAIN_* into the *run* environment; the
+# pinned ghcr.io/cross-rs/x86_64-pc-windows-gnu:0.2.5 image does not bake them in as ENV,
+# so at BUILD time they expand to "" and every `$CROSS_SYSROOT/include` below resolves to
+# /include -- which is why the header copy died with exit 1. Pin them to what this image
+# actually ships (verified: Ubuntu 18.04, gcc 7.3, sysroot /usr/x86_64-w64-mingw32).
+# Re-check these if the base image tag is ever bumped.
+ENV CROSS_SYSROOT=/usr/x86_64-w64-mingw32
+ENV CROSS_TOOLCHAIN_PREFIX=x86_64-w64-mingw32-
+ENV CROSS_TOOLCHAIN_SUFFIX=-posix
+
 # -- Overwrite the openssl finder so we just don't do anything (it'll just error out even though we have the lib)
 RUN echo "" > $(cmake --system-information | grep CMAKE_ROOT | cut -d'"' -f2)/Modules/FindOpenSSL.cmake
 
