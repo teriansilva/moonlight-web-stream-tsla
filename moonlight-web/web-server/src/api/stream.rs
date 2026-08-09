@@ -158,15 +158,41 @@ pub async fn start_host(
     Ok(response)
 }
 
+/// Authenticate a stream WebSocket.
+///
+/// `/api/host/stream` is exempt from `auth_middleware` (the credential arrives in the
+/// first WS message rather than an Authorization header), so this function has to
+/// reproduce the middleware's rules itself — **including gating the raw-password
+/// fallback on TOTP being disabled**.
+///
+/// It previously tried `authenticate_with_credentials()` unconditionally, so with 2FA
+/// switched on the password alone still opened both this AV channel and the
+/// attach-input channel (keyboard/mouse/gamepad), silently defeating the second factor
+/// on the most sensitive endpoint in the app. Keep this in lockstep with
+/// `auth_middleware`.
 async fn authenticate(
     credentials: &ApiCredentials,
     request_credentials: Option<&str>,
 ) -> bool {
-    credentials.authenticate_with_credentials(request_credentials)
-        || match request_credentials {
-            Some(token) => credentials.validate_session(token).await,
-            None => false,
+    // No password configured at all => credential auth is disabled outright. Mirrors the
+    // `enable_credential_authentication()` short-circuit in `auth_middleware`.
+    if !credentials.enable_credential_authentication() {
+        return true;
+    }
+
+    // A valid session token (only issuable after TOTP, when TOTP is on) is always enough.
+    if let Some(token) = request_credentials {
+        if credentials.validate_session(token).await {
+            return true;
         }
+    }
+
+    // Raw-password fallback: permitted only while 2FA is off, for backward compatibility.
+    if !credentials.is_totp_enabled().await {
+        return credentials.authenticate_with_credentials(request_credentials);
+    }
+
+    false
 }
 
 /// Relays browser -> streamer messages for a single client_id until the
